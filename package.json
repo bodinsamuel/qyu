@@ -1,7 +1,7 @@
 {
   "name": "algolia-test-samuel",
   "version": "1.0.0",
-  "description": "",
+  "description": "Algolia test by samuel",
   "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -16,11 +16,15 @@
   },
   "author": "bodin samuel",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bodinsamuel/qyu.git"
+  },
   "devDependencies": {
     "eslint": "4.19.1",
     "eslint-plugin-jest": "^21.15.0",
     "husky": "0.14.3",
-    "jest": "22.4.3",
+    "jest": "^22.4.3",
     "lint-staged": "7.0.4",
     "prettier": "1.12.0"
   }
