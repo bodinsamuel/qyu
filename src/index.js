@@ -1,5 +1,5 @@
-import Qyu from './qyu';
+const Qyu = require('@/qyu');
 
-export default (args) => {
+module.exports = (args) => {
   return new Qyu(args);
-}
+};

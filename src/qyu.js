@@ -1,4 +1,4 @@
-export default class Qyu {
+module.exports = class Qyu {
   constructor({ rateLimit = 50, statsInterval = 300 }) {
     this.rateLimit = rateLimit;
     this.statsInterval = statsInterval;
@@ -8,18 +8,18 @@ export default class Qyu {
     this.listener = [];
   }
 
-  trigger() {
-
-  }
+  trigger() {}
 
   on(name, callback) {
     this.listener.push({ name, callback });
   }
 
-  off() {
-  }
+  off() {}
 
-  push([]) {
-
+  push([job, priority]) {
+    this.queue.push({
+      job,
+      priority,
+    });
   }
-}
+};
