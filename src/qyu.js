@@ -1,5 +1,5 @@
 module.exports = class Qyu {
-  constructor({ rateLimit = 50, statsInterval = 300 }) {
+  constructor({ rateLimit = 50, statsInterval = 300 } = {}) {
     this.state = 'stop';
 
     this.rateLimit = rateLimit;
