@@ -103,7 +103,6 @@ module.exports = class Runner {
       return listener.name === name && listener.callback === callback;
     });
     if (index === false) {
-      console.log(`trying to off(${name}) but no listeners registered have matched`);
       return;
     }
     this.listeners = this.listeners.splice(0, index);
