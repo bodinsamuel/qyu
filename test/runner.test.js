@@ -75,6 +75,27 @@ describe('on()', () => {
     });
     q.start();
   });
+
+  test('should register a once listener correctly', (done) => {
+    const q = new Runner();
+    expect(q.listeners).toHaveLength(0);
+
+    q.on('drain', () => {
+      // because everything is async,
+      // drain is actually called before we had the chance to remove the once listener
+      // So just wait a few ms just to be sure
+      setTimeout(() => {
+        expect(q.listeners).toHaveLength(1);
+        done();
+      }, 10);
+    });
+
+    q.on('done', () => true, { once: true });
+    expect(q.listeners).toHaveLength(2);
+
+    q.push(() => true, 1);
+    q.start();
+  });
 });
 
 describe('off()', () => {
@@ -108,5 +129,58 @@ describe('start()', () => {
   test('should return a promise', () => {
     const p = q.start();
     expect(p).toBeInstanceOf(Promise);
+  });
+});
+
+describe('pause()', () => {
+  let q;
+  beforeEach(() => {
+    q = new Runner();
+  });
+
+  test('should return a promise', () => {
+    const p = q.pause();
+    expect(p).toBeInstanceOf(Promise);
+  });
+});
+
+describe('wait()', () => {
+  let q;
+  beforeEach(() => {
+    q = new Runner();
+  });
+
+  test('should return a promise', () => {
+    const p = q.wait();
+    expect(p).toBeInstanceOf(Promise);
+  });
+
+  test('should be called after a task was exec', (done) => {
+    const id = q.push(() => true, 1);
+    q.wait(id).then((result) => {
+      expect(result).toEqual(true);
+
+      // because it was an event we need to be sure it was registered and removed
+      expect(q.listeners).toHaveLength(1);
+      setTimeout(() => {
+        expect(q.listeners).toHaveLength(0);
+        done();
+      }, 5);
+    });
+
+    q.start();
+  });
+
+  test('should be called after a task was exec, already done', (done) => {
+    const id = q.push(() => true, 1);
+    q.start();
+
+    setTimeout(() => {
+      q.wait(id).then((result) => {
+        expect(q.listeners).toHaveLength(0);
+        expect(result).toEqual(true);
+        done();
+      });
+    }, 10);
   });
 });

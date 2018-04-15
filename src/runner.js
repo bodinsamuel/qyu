@@ -41,10 +41,39 @@ module.exports = class Runner {
 
   /**
    * Wait for a task to finish
-   * @param  {string} id Unique identifier given when you push()
+   * @param  {string} idToWatch Unique identifier given when you push()
    * @return {Promise}
    */
-  wait() {}
+  wait(idToWatch) {
+    return new Promise((resolve) => {
+      // Simply register an event done and wait for the right id to be called
+      const off = this.on(
+        'done',
+        (task) => {
+          if (task.id !== idToWatch) {
+            return false;
+          }
+
+          resolve(task.result);
+          return true;
+        },
+        { once: true }
+      );
+
+      // ----
+      // Because the task can already be done (thus will not trigger an event)
+      // we also do a manual check here
+      for (var i = 0; i < this.done.length; i++) {
+        if (this.done[i].id !== idToWatch) {
+          continue;
+        }
+
+        off(); // remove listener
+        resolve(this.done[i].result);
+        return;
+      }
+    });
+  }
 
   /**
    * Listen internal event
@@ -52,8 +81,13 @@ module.exports = class Runner {
    * @param  {Function} callback
    * @return {Function}
    */
-  on(name, callback) {
-    this.listeners.push({ name, callback });
+  on(name, callback, { once = false } = {}) {
+    this.listeners.push({
+      name,
+      callback,
+      options: { once },
+    });
+
     return () => {
       this.off(name, callback);
     };
@@ -68,6 +102,10 @@ module.exports = class Runner {
     const index = this.listeners.findIndex((listener) => {
       return listener.name === name && listener.callback === callback;
     });
+    if (index === false) {
+      console.log(`trying to off(${name}) but no listeners registered have matched`);
+      return;
+    }
     this.listeners = this.listeners.splice(0, index);
   }
 
@@ -78,7 +116,7 @@ module.exports = class Runner {
       task.error = false;
 
       task.result = await task.callback();
-      task.done = true;
+      task.done = new Date();
       this.done.push(task);
 
       this._trigger('done', task);
@@ -87,15 +125,21 @@ module.exports = class Runner {
       task.error = e;
       this._trigger('error', task);
     }
+
+    // loop again
+    this.start();
   }
 
   _trigger(name, data) {
-    this.listeners.forEach((listener) => {
+    this.listeners.forEach(async (listener) => {
       if (listener.name !== name) {
         return;
       }
 
-      listener.callback(data);
+      const result = await listener.callback(data);
+      if (listener.options.once === true && result === true) {
+        this.off(name, listener.callback);
+      }
     });
   }
 };
