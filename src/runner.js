@@ -96,7 +96,21 @@ module.exports = class Runner {
    * @return {Promise}
    */
   pause() {
-    return Promise.resolve();
+    return new Promise((resolve) => {
+      if (this.state !== 'play') {
+        resolve();
+        return;
+      }
+
+      this.on(
+        'drain',
+        () => {
+          resolve();
+          return true;
+        },
+        { once: true }
+      );
+    });
   }
 
   /**
@@ -139,9 +153,12 @@ module.exports = class Runner {
    * Listen internal event
    * @param  {string}   name
    * @param  {Function} callback
+   * @param  {object}   options
    * @return {Function}
    */
   on(name, callback, { once = false } = {}) {
+    // -- Options
+    // once: the callback need to return true/false to self destruct
     this.listeners.push({
       name,
       callback,

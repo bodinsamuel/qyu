@@ -56,12 +56,21 @@ const id = q.push(() => console.log('myjob'), 1);
 #### stats():Object
 > Respond with current stats instantly
 
+#### on(`name<string>`, `callback<function>`, `options<object>`):Function
+> Add an event listener, return a function to unlisten
+```javascript
+const listener = q.on('done', () => console.log('received'));
+listener(); // alias for off('done', <thecallback>);
+```
+
+#### off(`name<string>`, `callback<function>`):Object
+> Remove an event listener
+```javascript
+q.off('done', () => console.log('received'));
+```
+
 
 ### Events
-Multiple events are sent, you can subscribe like this:
-```javascript
-q.on('done', () => console.log('received'));
-```
 #### done
 > Sent when a task was successfully executed
 ```javascript
@@ -88,7 +97,8 @@ q.on('stats', (stats) => console.log({ stats }));
 
 The implementation was thought with this in mind:
 
-- It has to handle thousand of tasks
+- It has to handle probably thousands of tasks
+- tasks will be prioritized
 - tasks will probably be between 10ms to +3seconds
 - task can fail but it has to be clear about that
 - it has to be very light and simple
@@ -96,17 +106,39 @@ The implementation was thought with this in mind:
 
 ## runner.js
 The Runner is the actual task (job) processor. It handle the stats, the processing, the events and so on.
+It take tasks, and process them in an interval (`loopInterval`).
+#### Why the interval ?
+The interval help us optimizing the rateLimit. A naive implementation would be to launch 50 task and that theses task call an other processing.
+It's quiet easy but it's also very error prone, if you don't handle process well (with error or so) you can easily end with no remaining processor alive.
+The interval help us checking very regurarly if processors are available, if tasks are executed quicker than our interval then processing task is lost, but it's most likely that the interval will check more often than what is available. It also keep the call stack very light, as we do not do recursive task processor, as opposed to naive method.
+
+The second interval for stats is here to ensure we send stats exactly every `statsInterval` and also to send initial and final stats.
 
 
 ## Queue.js
-The Queue is the "storage" of the tasks.
+The Queue is the "storage" of the tasks. I assumed the task will be prioritized by number and that range can be changed.
 
--
+#### Buckets ?
+Instead of having a big fast Array of tasks, I'v decided to implements a light buckets system. The keys are the range of priority (from 1 to 10) and task are pushed in the right buckets when they are initially pushed in the queue.
+I choose that system, because if we handle thousand of task it can be very CPU consuming to iterate the whole queue when we need an item.
+We could have done sort-on-push but it will need to rewrite the whole array every time we push.
+We could have done sort-on-shift but its probably the worst solution (specially if tasks are very quick).
+
+This solution make the `shift()` call very predictible, it will execute max 10 iterations, and pick one task without rewriting the whole array. It's very lightweight and quiet simple.
+The only backside to this, because it was more fitting to this exercice the strategy is almost hardcoded, but it can be easily improved but splitting code more or letting user override push/shift (i.e: if we want to change strategy from prioritized to alpha).
+
+
 
 ## Technology
 This library use
 - `prettier` + `eslint` for the syntax check/formatting, it really help to have a standard and automatic formatting (on pre-commit)
-- `jest` for the unit test, the api is clear and the cli is quiet powerful without overhead
+- `jest` for the unit test and coverage, the api is clear and the cli is quiet powerful without overhead
+
+This library does not use (but could be)
+- a better unique id generator
+- node.js Events emitter or a library (I actually implemented my own solution to have specific pseudo "once()" but it act mostly like the native one)
+- a CLI lib to better handle node.js execution (--help, command parsing, interactive display..)
+
 
 ## Improvements
 We could easily improve the script by entirely splitting the queue and the runner, to have a master queue and multiple runner in multiple node process. With websockets communication and message ack, but at this point, maybe a battle tested tools would be more suited.
