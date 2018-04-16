@@ -1,12 +1,12 @@
 const Queue = require('./queue');
 
 module.exports = class Runner {
-  constructor({ rateLimit = 50, statsInterval = 300, loopInterval = 16 } = {}) {
+  constructor({ rateLimit = 50, statsInterval = 300, loopInterval = 100 } = {}) {
     this.state = 'stop';
 
     this.rateLimit = rateLimit;
     this.statsInterval = statsInterval;
-    this.loopInterval = loopInterval; // 1 FPS
+    this.loopInterval = loopInterval;
 
     // Create queue
     this.queue = new Queue();
@@ -35,7 +35,7 @@ module.exports = class Runner {
     }
   }
 
-  // ************************************* PUBLIC api *****
+  // ************************************* PUBLIC API ************************//
   /**
    * Launch task processing
    * @return {Promise}
@@ -74,10 +74,13 @@ module.exports = class Runner {
       }
     }, this.loopInterval);
 
+    // Stats sender
     this._processStats = setInterval(() => {
       const stats = this.stats();
       this._emit('stats', stats);
 
+      // When we reach 0 task remaining
+      // we send a final event and clear the process
       if (stats.remaining === 0) {
         this.state = 'pause';
         this._emit('drain');

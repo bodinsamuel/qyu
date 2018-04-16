@@ -65,6 +65,10 @@ module.exports = class Queue {
     return len;
   }
 
+  /**
+   * Get a "unique" id (not really but suffisant for small usage)
+   * @return {string}
+   */
   _getUID() {
     return (Math.random() + 1).toString(36).substr(0, 7);
   }
