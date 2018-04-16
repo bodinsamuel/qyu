@@ -87,7 +87,7 @@ describe('on()', () => {
       setTimeout(() => {
         expect(q.listeners).toHaveLength(1);
         done();
-      }, 10);
+      }, 20);
     });
 
     q.on('done', () => true, { once: true });
@@ -145,17 +145,14 @@ describe('pause()', () => {
 });
 
 describe('wait()', () => {
-  let q;
-  beforeEach(() => {
-    q = new Runner();
-  });
-
   test('should return a promise', () => {
+    const q = new Runner();
     const p = q.wait();
     expect(p).toBeInstanceOf(Promise);
   });
 
   test('should be called after a task was exec', (done) => {
+    const q = new Runner();
     const id = q.push(() => true, 1);
     q.wait(id).then((result) => {
       expect(result).toEqual(true);
@@ -165,13 +162,14 @@ describe('wait()', () => {
       setTimeout(() => {
         expect(q.listeners).toHaveLength(0);
         done();
-      }, 5);
+      }, 20);
     });
 
     q.start();
   });
 
   test('should be called after a task was exec, already done', (done) => {
+    const q = new Runner();
     const id = q.push(() => true, 1);
     q.start();
 
@@ -181,6 +179,60 @@ describe('wait()', () => {
         expect(result).toEqual(true);
         done();
       });
-    }, 10);
+    }, 20);
+  });
+});
+
+describe('stats()', () => {
+  test('should return a valid object', () => {
+    const q = new Runner();
+    const stats = q.stats();
+    expect(stats).toMatchObject({
+      nbJobsPerSecond: 0,
+      doneSinceLastPush: 0,
+      done: 0,
+      remaining: 0,
+    });
+  });
+
+  test('should send stats event', (done) => {
+    const q = new Runner();
+    for (var i = 0; i < 10; i++) {
+      q.push(async () => {
+        return new Promise((resolve) => {
+          setTimeout(resolve, 35);
+        });
+      }, 1);
+    }
+
+    let incr = 0;
+    q.on('stats', (stats) => {
+      if (incr === 0) {
+        expect(stats).toMatchObject({
+          nbJobsPerSecond: 0,
+          doneSinceLastPush: 0,
+          done: 0,
+          remaining: 10,
+        });
+      } else if (incr === 1) {
+        expect(stats).toMatchObject({
+          nbJobsPerSecond: 10,
+          doneSinceLastPush: 10,
+          done: 10,
+          remaining: 0,
+        });
+      } else if (incr === 2) {
+        expect(stats).toMatchObject({
+          nbJobsPerSecond: 10,
+          doneSinceLastPush: 0,
+          done: 10,
+          remaining: 0,
+        });
+        done();
+      }
+
+      incr += 1;
+    });
+    q.start();
   });
 });

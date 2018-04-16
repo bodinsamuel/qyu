@@ -1,18 +1,38 @@
 const Queue = require('./queue');
 
 module.exports = class Runner {
-  constructor({ rateLimit = 50, statsInterval = 300 } = {}) {
+  constructor({ rateLimit = 50, statsInterval = 300, loopInterval = 16 } = {}) {
     this.state = 'stop';
 
     this.rateLimit = rateLimit;
     this.statsInterval = statsInterval;
+    this.loopInterval = loopInterval; // 1 FPS
 
     // Create queue
     this.queue = new Queue();
     this.push = this.queue.push.bind(this.queue);
 
-    this.listeners = [];
+    this.startedDate = new Date();
+    this.lastLoopDate = null;
+
+    this._stats = {
+      done: 0,
+      doneSinceLastPush: 0,
+    };
+
     this.done = [];
+    this.current = [];
+
+    this.listeners = [];
+
+    this._process = null;
+    this._processStats = null;
+  }
+
+  set state(value) {
+    if (value === 'stop' || value === 'pause') {
+      clearInterval(this.process);
+    }
   }
 
   // ************************************* PUBLIC api *****
@@ -21,12 +41,49 @@ module.exports = class Runner {
    * @return {Promise}
    */
   start() {
-    const task = this.queue.shift();
-    if (!task) {
-      this._trigger('drain');
-    } else {
-      this._exec(task);
+    // do not launch multiple loop
+    if (this.state === 'play') {
+      return Promise.resolve();
     }
+
+    this.state = 'play';
+
+    // Send initial stats
+    this._emit('stats', this.stats());
+
+    // Because we need to send stats regurarly,
+    //  it's easier to actually process task in a timeInterval
+    //  it also avoid chaining task, we just check every time if we can process more or less every iteration
+    this._process = setInterval(() => {
+      this.lastLoopDate = new Date();
+
+      // We calcul remaining processors available
+      const remaining = this.rateLimit - this.current.length;
+
+      // We iterate to fill all remaining processor
+      // it help us reach easyliy rateLimit without trespassing
+      for (var i = 0; i < remaining; i++) {
+        const task = this.queue.shift();
+        this.current.push(task.id);
+
+        if (!task) {
+          return;
+        }
+
+        this._exec(task);
+      }
+    }, this.loopInterval);
+
+    this._processStats = setInterval(() => {
+      const stats = this.stats();
+      this._emit('stats', stats);
+
+      if (stats.remaining === 0) {
+        this.state = 'pause';
+        this._emit('drain');
+        clearInterval(this.statsInterval);
+      }
+    }, this.statsInterval);
 
     return Promise.resolve();
   }
@@ -102,13 +159,49 @@ module.exports = class Runner {
     const index = this.listeners.findIndex((listener) => {
       return listener.name === name && listener.callback === callback;
     });
+
     if (index === false) {
       return;
     }
-    this.listeners = this.listeners.splice(0, index);
+
+    this.listeners.splice(index, 1);
+  }
+
+  /**
+   * Get stats
+   * @return {object}
+   */
+  stats() {
+    let nbJobsPerSecond = 0;
+
+    // Last second
+    const before = new Date() - 1000;
+
+    // Use reverse for, to filter last pushed item
+    //  + allow us to early return instead of listing all items
+    for (var i = this.done.length - 1; i >= 0; i--) {
+      if (before > this.done[i]) {
+        break;
+      }
+
+      nbJobsPerSecond += 1;
+    }
+
+    const doneSinceLastPush = this._stats.doneSinceLastPush;
+    this._stats.doneSinceLastPush = 0;
+    return {
+      nbJobsPerSecond,
+      doneSinceLastPush,
+      done: this._stats.done,
+      remaining: this.queue.length(),
+    };
   }
 
   // ************************************ Private api *****
+  /**
+   * Execute a task
+   * @param  {object} task
+   */
   async _exec(task) {
     try {
       task.retry += 1;
@@ -117,19 +210,26 @@ module.exports = class Runner {
       task.result = await task.callback();
       task.done = new Date();
       this.done.push(task);
+      this._stats.done += 1;
+      this._stats.doneSinceLastPush += 1;
 
-      this._trigger('done', task);
+      this._emit('done', task);
     } catch (e) {
       // at this point we could have a retry
       task.error = e;
-      this._trigger('error', task);
+      this._emit('error', task);
     }
 
-    // loop again
-    this.start();
+    // Remove from the current wether done or not
+    this.current = this.current.splice(this.current.indexOf(task.id), 1);
   }
 
-  _trigger(name, data) {
+  /**
+   * Emit an evvent
+   * @param  {string} name
+   * @param  {object} data
+   */
+  _emit(name, data) {
     this.listeners.forEach(async (listener) => {
       if (listener.name !== name) {
         return;
