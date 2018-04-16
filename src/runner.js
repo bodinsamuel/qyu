@@ -2,8 +2,7 @@ const Queue = require('./queue');
 
 module.exports = class Runner {
   constructor({ rateLimit = 50, statsInterval = 300, loopInterval = 100 } = {}) {
-    this.state = 'stop';
-
+    // Options
     this.rateLimit = rateLimit;
     this.statsInterval = statsInterval;
     this.loopInterval = loopInterval;
@@ -12,27 +11,36 @@ module.exports = class Runner {
     this.queue = new Queue();
     this.push = this.queue.push.bind(this.queue);
 
+    // Tasks processing
+    this.done = [];
+    this.current = [];
+
+    // Stats
     this.startedDate = new Date();
     this.lastLoopDate = null;
-
     this._stats = {
       done: 0,
       doneSinceLastPush: 0,
     };
 
-    this.done = [];
-    this.current = [];
-
+    // event listeners
     this.listeners = [];
 
+    // setInterval process
     this._process = null;
     this._processStats = null;
+
+    this._state = 'stop';
   }
 
   set state(value) {
     if (value === 'stop' || value === 'pause') {
       clearInterval(this.process);
     }
+    this._state = value;
+  }
+  get state() {
+    return this._state;
   }
 
   // ************************************* PUBLIC API ************************//
@@ -43,7 +51,7 @@ module.exports = class Runner {
   start() {
     // do not launch multiple loop
     if (this.state === 'play') {
-      return Promise.resolve();
+      return Promise.resolve('already started');
     }
 
     this.state = 'play';
@@ -88,7 +96,7 @@ module.exports = class Runner {
       }
     }, this.statsInterval);
 
-    return Promise.resolve();
+    return Promise.resolve('started');
   }
 
   /**
@@ -101,6 +109,8 @@ module.exports = class Runner {
         resolve();
         return;
       }
+
+      this.state = 'pause';
 
       this.on(
         'drain',
@@ -180,11 +190,12 @@ module.exports = class Runner {
       return listener.name === name && listener.callback === callback;
     });
 
-    if (index === false) {
-      return;
+    if (index === -1) {
+      return false;
     }
 
     this.listeners.splice(index, 1);
+    return true;
   }
 
   /**
@@ -197,10 +208,10 @@ module.exports = class Runner {
     // Last second
     const before = new Date() - 1000;
 
-    // Use reverse for, to filter last pushed item
+    // Use reverse for, to filter by last pushed item
     //  + allow us to early return instead of listing all items
     for (var i = this.done.length - 1; i >= 0; i--) {
-      if (before > this.done[i]) {
+      if (before > this.done[i].doneDate) {
         break;
       }
 
@@ -208,7 +219,10 @@ module.exports = class Runner {
     }
 
     const doneSinceLastPush = this._stats.doneSinceLastPush;
+
+    // reset stats
     this._stats.doneSinceLastPush = 0;
+
     return {
       nbJobsPerSecond,
       doneSinceLastPush,
@@ -228,14 +242,14 @@ module.exports = class Runner {
       task.error = false;
 
       task.result = await task.callback();
-      task.done = new Date();
+      task.doneDate = new Date();
       this.done.push(task);
       this._stats.done += 1;
       this._stats.doneSinceLastPush += 1;
 
       this._emit('done', task);
     } catch (e) {
-      // at this point we could have a retry
+      // At this point we could have a retry
       task.error = e;
       this._emit('error', task);
     }

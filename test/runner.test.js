@@ -118,29 +118,51 @@ describe('off()', () => {
     off();
     expect(q.listeners).toHaveLength(0);
   });
+
+  test('should return false on unknown listener', () => {
+    const q = new Runner();
+    const off = q.off('done', () => true);
+    expect(off).toEqual(false);
+  });
 });
 
 describe('start()', () => {
-  let q;
-  beforeEach(() => {
-    q = new Runner();
-  });
-
   test('should return a promise', () => {
+    const q = new Runner();
     const p = q.start();
     expect(p).toBeInstanceOf(Promise);
+  });
+
+  test('should return already started', async () => {
+    const q = new Runner();
+    q.start();
+    const p2 = await q.start();
+    expect(p2).toEqual('already started');
   });
 });
 
 describe('pause()', () => {
-  let q;
-  beforeEach(() => {
-    q = new Runner();
-  });
-
   test('should return a promise', () => {
+    const q = new Runner();
     const p = q.pause();
     expect(p).toBeInstanceOf(Promise);
+  });
+
+  test('should return a pause after all task are being processed', async () => {
+    const q = new Runner();
+    let hasPassed = false;
+    q.push(async () => {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          hasPassed = true;
+          resolve();
+        }, 100);
+      });
+    }, 1);
+    q.start();
+
+    await q.pause();
+    expect(hasPassed).toEqual(true);
   });
 });
 
@@ -179,7 +201,7 @@ describe('wait()', () => {
         expect(result).toEqual(true);
         done();
       });
-    }, 20);
+    }, 130);
   });
 });
 
@@ -234,5 +256,22 @@ describe('stats()', () => {
       incr += 1;
     });
     q.start();
+  });
+
+  test('should return 0 when waiting longer than statsInterval', (done) => {
+    const q = new Runner();
+    q.push(() => true, 1);
+    q.start();
+
+    setTimeout(() => {
+      const stats = q.stats();
+      expect(stats).toMatchObject({
+        nbJobsPerSecond: 0,
+        doneSinceLastPush: 0,
+        done: 1,
+        remaining: 0,
+      });
+      done();
+    }, 2000);
   });
 });

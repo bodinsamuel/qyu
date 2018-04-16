@@ -55,6 +55,12 @@ describe('push()', () => {
       done: false,
     });
   });
+
+  test('should throw on bad push', () => {
+    expect(() => {
+      q.push(false);
+    }).toThrow();
+  });
 });
 
 describe('_getUID()', () => {
