@@ -72,8 +72,6 @@ module.exports = class Runner {
       // it help us reach easyliy rateLimit without trespassing
       for (var i = 0; i < remaining; i++) {
         const task = this.queue.shift();
-        this.current.push(task.id);
-
         if (!task) {
           return;
         }
@@ -89,11 +87,13 @@ module.exports = class Runner {
 
       // When we reach 0 task remaining
       // we send a final event and clear the process
-      if (stats.remaining === 0) {
-        this.state = 'pause';
-        this._emit('drain');
-        clearInterval(this.statsInterval);
+      if (stats.remaining !== 0 || stats.current !== 0) {
+        return;
       }
+
+      this.state = 'pause';
+      this._emit('drain');
+      clearInterval(this.statsInterval);
     }, this.statsInterval);
 
     return Promise.resolve('started');
@@ -227,6 +227,7 @@ module.exports = class Runner {
       nbJobsPerSecond,
       doneSinceLastPush,
       done: this._stats.done,
+      current: this.current.length,
       remaining: this.queue.length(),
     };
   }
@@ -237,6 +238,8 @@ module.exports = class Runner {
    * @param  {object} task
    */
   async _exec(task) {
+    this.current.push(task);
+
     try {
       task.retry += 1;
       task.error = false;
@@ -255,7 +258,9 @@ module.exports = class Runner {
     }
 
     // Remove from the current wether done or not
-    this.current = this.current.splice(this.current.indexOf(task.id), 1);
+    this.current = this.current.filter((item) => {
+      return item.id !== task.id;
+    });
   }
 
   /**

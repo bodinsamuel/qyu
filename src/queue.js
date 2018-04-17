@@ -2,6 +2,7 @@ module.exports = class Queue {
   constructor({ maxPriority = 10 } = {}) {
     this.maxPriority = maxPriority;
     this.buckets = {};
+    this.pushed = 0;
 
     // Create initial bucket with X entries
     for (var i = 1; i <= this.maxPriority; i++) {
@@ -32,6 +33,7 @@ module.exports = class Queue {
       error: false,
       done: false,
     });
+    this.pushed += 1;
 
     return id;
   }

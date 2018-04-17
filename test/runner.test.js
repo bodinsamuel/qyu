@@ -203,6 +203,32 @@ describe('wait()', () => {
       });
     }, 130);
   });
+  test('should send the correct id', async () => {
+    const q = new Runner();
+    const ids = [];
+    for (let i = 0; i < 10; i++) {
+      ids.push([
+        q.push(async () => {
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              resolve(i);
+            }, 35);
+          });
+        }, 1),
+        i,
+      ]);
+    }
+    q.start();
+
+    var result1 = await q.wait(ids[4][0]);
+    expect(result1).toEqual(ids[4][1]);
+
+    var result2 = await q.wait(ids[1][0]);
+    expect(result2).toEqual(ids[1][1]);
+
+    var result3 = await q.wait(ids[9][0]);
+    expect(result3).toEqual(ids[9][1]);
+  });
 });
 
 describe('stats()', () => {
@@ -254,6 +280,28 @@ describe('stats()', () => {
       }
 
       incr += 1;
+    });
+    q.start();
+  });
+
+  test('should not emit drain if remaining', (done) => {
+    const q = new Runner({
+      rateLimit: 5,
+      statsInterval: 35,
+    });
+    for (var i = 0; i < 10; i++) {
+      q.push(async () => {
+        return new Promise((resolve) => {
+          setTimeout(resolve, 35);
+        });
+      }, 1);
+    }
+
+    q.on('drain', () => {
+      const stats = q.stats();
+      expect(stats.remaining).toEqual(0);
+      expect(stats.current).toEqual(0);
+      done();
     });
     q.start();
   });
