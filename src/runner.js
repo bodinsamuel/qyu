@@ -1,7 +1,7 @@
 const Queue = require('./queue');
 
 module.exports = class Runner {
-  constructor({ rateLimit = 50, statsInterval = 300, loopInterval = 100 } = {}) {
+  constructor({ rateLimit = 50, statsInterval = 300, loopInterval = 50 } = {}) {
     // Options
     this.rateLimit = rateLimit;
     this.statsInterval = statsInterval;
@@ -35,7 +35,8 @@ module.exports = class Runner {
 
   set state(value) {
     if (value === 'stop' || value === 'pause') {
-      clearInterval(this.process);
+      clearInterval(this._process);
+      clearInterval(this._processStats);
     }
     this._state = value;
   }
@@ -93,7 +94,6 @@ module.exports = class Runner {
 
       this.state = 'pause';
       this._emit('drain');
-      clearInterval(this.statsInterval);
     }, this.statsInterval);
 
     return Promise.resolve('started');
@@ -204,6 +204,7 @@ module.exports = class Runner {
    */
   stats() {
     let nbJobsPerSecond = 0;
+    const execTimes = [];
 
     // Last second
     const before = new Date() - 1000;
@@ -214,7 +215,7 @@ module.exports = class Runner {
       if (before > this.done[i].doneDate) {
         break;
       }
-
+      execTimes.push(this.done[i].doneDate - this.done[i].startDate);
       nbJobsPerSecond += 1;
     }
 
@@ -229,6 +230,10 @@ module.exports = class Runner {
       done: this._stats.done,
       current: this.current.length,
       remaining: this.queue.length(),
+      averageExecTime:
+        execTimes.length > 0
+          ? Math.round(execTimes.reduce((current, time) => current + time, 0) / execTimes.length)
+          : 0,
     };
   }
 
@@ -244,6 +249,7 @@ module.exports = class Runner {
       task.retry += 1;
       task.error = false;
 
+      task.startDate = new Date();
       task.result = await task.callback();
       task.doneDate = new Date();
       this.done.push(task);
