@@ -1,22 +1,42 @@
 const Runner = require('./../src/Runner');
 
-test('should create a new instance correctly', () => {
-  const instance = new Runner();
-  expect(instance).toBeInstanceOf(Runner);
-});
-
-test('should have correct default params without constructor args', () => {
-  const instance = new Runner();
-  expect(instance.rateLimit).toEqual(50);
-  expect(instance.statsInterval).toEqual(300);
-});
-
-test('should have correct params when passed', () => {
-  const instance = new Runner({
-    rateLimit: 100,
+describe('new()', () => {
+  test('should create a new instance correctly', () => {
+    const instance = new Runner();
+    expect(instance).toBeInstanceOf(Runner);
   });
-  expect(instance.rateLimit).toEqual(100);
-  expect(instance.statsInterval).toEqual(300);
+
+  test('should have correct default params without constructor args', () => {
+    const instance = new Runner();
+    expect(instance.rateLimit).toEqual(50);
+    expect(instance.statsInterval).toEqual(300);
+  });
+
+  test('should have correct params when passed', () => {
+    const instance = new Runner({
+      rateLimit: 100,
+    });
+    expect(instance.rateLimit).toEqual(100);
+    expect(instance.statsInterval).toEqual(300);
+  });
+});
+
+describe('destroy()', () => {
+  test('should destroy and let not', async () => {
+    const q = new Runner();
+    q.push(() => true, 1);
+    await q.start();
+
+    q.destroy();
+
+    expect(q.push).toEqual(null);
+    expect(q.queue).toEqual([]);
+    expect(q.current).toEqual([]);
+    expect(q.done).toEqual([]);
+    expect(q._process).toEqual(null);
+    expect(q._processStats).toEqual(null);
+    expect(q.state).toEqual('stop');
+  });
 });
 
 describe('push()', () => {
@@ -26,12 +46,12 @@ describe('push()', () => {
   });
 
   test('should register job correctly', () => {
-    expect(q.queue.length()).toEqual(0);
+    expect(q.queue.length).toEqual(0);
 
     const job = () => true;
     const id = q.push(job, 1);
     expect(id).toMatch(/[a-z0-9]{0,7}/g);
-    expect(q.queue.length()).toEqual(1);
+    expect(q.queue.length).toEqual(1);
   });
 });
 
@@ -142,27 +162,36 @@ describe('start()', () => {
 });
 
 describe('pause()', () => {
-  test('should return a promise', () => {
+  test('should return a promise', (done) => {
     const q = new Runner();
     const p = q.pause();
     expect(p).toBeInstanceOf(Promise);
+    p.then((bool) => {
+      expect(bool).toEqual(true);
+      done();
+    });
   });
 
-  test('should return a pause after all task are being processed', async () => {
-    const q = new Runner();
+  test('should return a pause after all task are being processed', async (done) => {
+    const q = new Runner({
+      loopInterval: 10,
+    });
     let hasPassed = false;
-    q.push(async () => {
+    q.push(() => {
       return new Promise((resolve) => {
         setTimeout(() => {
           hasPassed = true;
           resolve();
-        }, 100);
+        }, 150);
       });
     }, 1);
-    q.start();
+    await q.start();
 
-    await q.pause();
-    expect(hasPassed).toEqual(true);
+    q.pause().then((bool) => {
+      expect(bool).toEqual(true);
+      expect(hasPassed).toEqual(true);
+      done();
+    });
   });
 });
 
@@ -244,11 +273,14 @@ describe('stats()', () => {
   });
 
   test('should send stats event', (done) => {
-    const q = new Runner();
+    const q = new Runner({
+      statsInterval: 11,
+      loopInterval: 15,
+    });
     for (var i = 0; i < 10; i++) {
       q.push(async () => {
         return new Promise((resolve) => {
-          setTimeout(resolve, 35);
+          setTimeout(resolve, 20);
         });
       }, 1);
     }
@@ -261,20 +293,26 @@ describe('stats()', () => {
           doneSinceLastPush: 0,
           done: 0,
           remaining: 10,
+          averageExecTime: 0,
+          current: 0,
         });
       } else if (incr === 1) {
+        expect(stats).toMatchObject({
+          nbJobsPerSecond: 0,
+          doneSinceLastPush: 0,
+          done: 0,
+          remaining: 0,
+          averageExecTime: stats.averageExecTime, // this value can not be predicted
+          current: 10,
+        });
+      } else if (incr === 2) {
         expect(stats).toMatchObject({
           nbJobsPerSecond: 10,
           doneSinceLastPush: 10,
           done: 10,
           remaining: 0,
-        });
-      } else if (incr === 2) {
-        expect(stats).toMatchObject({
-          nbJobsPerSecond: 10,
-          doneSinceLastPush: 0,
-          done: 10,
-          remaining: 0,
+          averageExecTime: stats.averageExecTime, // this value can not be predicted
+          current: 0,
         });
         done();
       }

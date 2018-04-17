@@ -33,13 +33,37 @@ module.exports = class Runner {
     this._state = 'stop';
   }
 
+  /**
+   * Destroy the class
+   *   In a node environment its pretty much useless as the script will die alone
+   *   but in a browser env, we need to be ok with GC and free pointer/interval
+   */
+  destroy() {
+    this.state = 'stop';
+
+    this.queue.destroy();
+    this.queue = [];
+    this.push = null;
+
+    this.current = [];
+    this.done = [];
+    this.listeners = [];
+
+    this._process = null;
+    this._processStats = null;
+  }
+
   set state(value) {
+    // Using get/set help us clearingInterval without user thinking about it
     if (value === 'stop' || value === 'pause') {
       clearInterval(this._process);
+    }
+    if (value === 'stop') {
       clearInterval(this._processStats);
     }
     this._state = value;
   }
+
   get state() {
     return this._state;
   }
@@ -63,22 +87,9 @@ module.exports = class Runner {
     // Because we need to send stats regurarly,
     //  it's easier to actually process task in a timeInterval
     //  it also avoid chaining task, we just check every time if we can process more or less every iteration
+    this._loop();
     this._process = setInterval(() => {
-      this.lastLoopDate = new Date();
-
-      // We calcul remaining processors available
-      const remaining = this.rateLimit - this.current.length;
-
-      // We iterate to fill all remaining processor
-      // it help us reach easyliy rateLimit without trespassing
-      for (var i = 0; i < remaining; i++) {
-        const task = this.queue.shift();
-        if (!task) {
-          return;
-        }
-
-        this._exec(task);
-      }
+      this._loop();
     }, this.loopInterval);
 
     // Stats sender
@@ -86,14 +97,23 @@ module.exports = class Runner {
       const stats = this.stats();
       this._emit('stats', stats);
 
-      // When we reach 0 task remaining
-      // we send a final event and clear the process
-      if (stats.remaining !== 0 || stats.current !== 0) {
+      // if still processing task and running
+      // do nothing more
+      if ((stats.remaining !== 0 || stats.current !== 0) && this.state === 'play') {
         return;
       }
 
-      this.state = 'pause';
-      this._emit('drain');
+      // do not change state if already 'stop'
+      if (this.state === 'play') {
+        this.state = 'pause';
+      }
+
+      // When we reach 0 task remaining
+      // we send a final event and clear the process
+      if (stats.remaining === 0) {
+        this._emit('drain');
+        clearInterval(this._processStats);
+      }
     }, this.statsInterval);
 
     return Promise.resolve('started');
@@ -105,17 +125,19 @@ module.exports = class Runner {
    */
   pause() {
     return new Promise((resolve) => {
+      // early return if runner is not launched
       if (this.state !== 'play') {
-        resolve();
+        resolve(true);
         return;
       }
 
       this.state = 'pause';
 
+      // we wait for the queue to drain before resolving
       this.on(
         'drain',
         () => {
-          resolve();
+          resolve(true);
           return true;
         },
         { once: true }
@@ -175,6 +197,7 @@ module.exports = class Runner {
       options: { once },
     });
 
+    // return a self remover
     return () => {
       this.off(name, callback);
     };
@@ -224,20 +247,41 @@ module.exports = class Runner {
     // reset stats
     this._stats.doneSinceLastPush = 0;
 
+    const averageExecTime =
+      execTimes.length > 0
+        ? Math.round(execTimes.reduce((current, time) => current + time, 0) / execTimes.length)
+        : 0;
+
     return {
       nbJobsPerSecond,
       doneSinceLastPush,
       done: this._stats.done,
       current: this.current.length,
-      remaining: this.queue.length(),
-      averageExecTime:
-        execTimes.length > 0
-          ? Math.round(execTimes.reduce((current, time) => current + time, 0) / execTimes.length)
-          : 0,
+      remaining: this.queue.length,
+      averageExecTime,
     };
   }
 
   // ************************************ Private api *****
+  _loop() {
+    this.lastLoopDate = new Date();
+
+    // We calcul remaining processors available
+    const remaining = this.rateLimit - this.current.length;
+
+    // We iterate to fill all remaining processor
+    // it help us reach easyliy rateLimit without trespassing
+    for (var i = 0; i < remaining; i++) {
+      const task = this.queue.shift();
+      if (!task) {
+        return;
+      }
+
+      // Execute the choosed task
+      this._exec(task);
+    }
+  }
+
   /**
    * Execute a task
    * @param  {object} task
@@ -249,9 +293,11 @@ module.exports = class Runner {
       task.retry += 1;
       task.error = false;
 
+      // Timing execution
       task.startDate = new Date();
       task.result = await task.callback();
       task.doneDate = new Date();
+
       this.done.push(task);
       this._stats.done += 1;
       this._stats.doneSinceLastPush += 1;
@@ -259,6 +305,7 @@ module.exports = class Runner {
       this._emit('done', task);
     } catch (e) {
       // At this point we could have a retry
+      // i.e: push back in the queue and retry with a maximum of retry
       task.error = e;
       this._emit('error', task);
     }
@@ -281,6 +328,9 @@ module.exports = class Runner {
       }
 
       const result = await listener.callback(data);
+
+      // if the listener was initiated with an options = { once: true }
+      // it will be automatically removed if the callback return true (aka it was correctly handled)
       if (listener.options.once === true && result === true) {
         this.off(name, listener.callback);
       }

@@ -22,10 +22,19 @@ q.on('drain', () => {
   end = new Date();
   console.log('No more jobs to do', end);
   console.log('Running time', (end - start) / 1000);
+
+  const stats = q.stats();
+  if (stats.done !== jobs) {
+    throw new Error('all jobs were not executed');
+  }
 });
 
 q.on('stats', (stats) => {
   console.log(`${stats.nbJobsPerSecond} jobs/s processed, avg execTime ${stats.averageExecTime}ms`);
+});
+
+q.on('error', ({ error }) => {
+  console.error(`error ${error.message}`);
 });
 
 (async () => {
@@ -34,6 +43,9 @@ q.on('stats', (stats) => {
   }
   await q.start();
   start = new Date();
+  setTimeout(() => {
+    // q.destroy();
+  }, 2000);
   console.log('start', start);
 })();
 

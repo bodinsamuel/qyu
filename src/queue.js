@@ -1,6 +1,7 @@
 module.exports = class Queue {
   constructor({ maxPriority = 10 } = {}) {
     this.maxPriority = maxPriority;
+
     this.buckets = {};
     this.pushed = 0;
 
@@ -8,6 +9,14 @@ module.exports = class Queue {
     for (var i = 1; i <= this.maxPriority; i++) {
       this.buckets[i] = [];
     }
+  }
+
+  destroy() {
+    this.buckets = null;
+  }
+
+  get length() {
+    return this._length();
   }
 
   /**
@@ -59,8 +68,9 @@ module.exports = class Queue {
    * Get length of the queue
    * @return {integer}
    */
-  length() {
+  _length() {
     let len = 0;
+    // because of the "buckets system" we need to iterate and add length
     for (var i = 0, keys = Object.keys(this.buckets); i < keys.length; i++) {
       len += this.buckets[keys[i]].length;
     }
@@ -68,7 +78,7 @@ module.exports = class Queue {
   }
 
   /**
-   * Get a "unique" id (not really but suffisant for small usage)
+   * Get a "unique" id (not really unique but suffisant for small usage)
    * @return {string}
    */
   _getUID() {

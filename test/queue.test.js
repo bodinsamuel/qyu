@@ -29,7 +29,7 @@ describe('push()', () => {
   });
 
   test('should push a task in queue correctly', () => {
-    expect(q.length()).toEqual(0);
+    expect(q.length).toEqual(0);
 
     const job = () => true;
     const id = q.push(job, 3);
@@ -45,7 +45,7 @@ describe('push()', () => {
       9: [],
       10: [],
     });
-    expect(q.length()).toEqual(1);
+    expect(q.length).toEqual(1);
     expect(q.buckets[3][0]).toMatchObject({
       id,
       priority: 3,

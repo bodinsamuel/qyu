@@ -8,6 +8,21 @@ q.push(() => mySuperLongJob);
 q.start();
 ```
 
+# Commands
+```bash
+# run test
+npm run test
+
+# run test with coverage (should be 100%)
+npm run coverage
+
+# run exercice (initial test given by algolia)
+node ./test/exercice.js
+
+# run stress test (100k task in 20s)
+node ./test/stresstest.js
+```
+
 ## API
 ### Configuration
 ```javascript
