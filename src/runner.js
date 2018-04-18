@@ -110,7 +110,7 @@ module.exports = class Runner {
 
       // When we reach 0 task remaining
       // we send a final event and clear the process
-      if (stats.remaining === 0) {
+      if (stats.remaining === 0 || this.state === 'pause') {
         this._emit('drain');
         clearInterval(this._processStats);
       }

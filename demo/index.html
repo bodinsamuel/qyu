@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Qyu basic demo</title>
+  <style type="text/css">
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font: 14px/16px 'Helvetica', 'Segoe UI', sans-serif;
+    }
+    #app {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    p {
+      margin: 0;
+    }
+    small {
+      color: #aaa;
+    }
+    fieldset {
+      border: 1px solid #aaa;
+    }
+    input {
+      width: 100%;
+    }
+    button {
+      border: none;
+      background-color: #6464ff;
+      font-size: 16px;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div>
+      <div>
+        <fieldset>
+          <label>Number of tasks</label>
+          <br><input type="range" v-model="nb_tasks" min="10" max="1000000" /> {{ nb_tasks }} tasks
+        </fieldset>
+        <fieldset>
+          <label>Duration of tasks</label>
+          <small>0 = random</small>
+          <br><input type="range" v-model="duration_task" min="0" max="20000" /> {{ duration_task }} ms
+        </fieldset>
+        <fieldset>
+          <label>Priority of tasks</label>
+          <small>0 = random</small>
+          <br><input type="range" v-model="priority_task" min="0" max="10" /> {{ priority_task }}
+        </fieldset>
+        <fieldset>
+          <label>Number of processor</label>
+          <small>More processors mean more concurrent task executed</small>
+          <br><input type="range" v-model="nb_processors" min="1" max="1000" /> {{ nb_processors }} processors
+        </fieldset>
+        <fieldset>
+          <label>Stats interval</label>
+          <small>Number of time between stats refresh. Lesser ms mean more precise stats</small>
+          <br><input type="range" v-model="stats_interval" min="10" max="1000" /> {{ stats_interval }} ms
+        </fieldset>
+        <fieldset>
+          <label>Main loop interval</label>
+          <small>Number of time between check for available processor. Lesser ms mean less time between each task</small>
+          <br><input type="range" v-model="main_loop_interval" min="5" max="1000" /> {{ main_loop_interval }} ms
+        </fieldset>
+      </div>
+      <br>
+      <div v-if="state === 'stop'">
+        <button @click="start">Start</button>
+      </div>
+      <div v-if="state === 'play'">
+        <button @click="stop">Stop</button>
+        <div v-if="pausing">PAUSING....</div>
+      </div>
+      <div>
+        <br>
+        <div>Dones {{ done }} / {{ nb_tasks }}</div>
+        <div>Errors {{ error }}</div>
+        <div>{{ stats.nbJobsPerSecond }} task/s</div>
+        <div>{{ stats.averageExecTime }} average execution time</div>
+        <div><small>Update is done on stop (because updating real time would slow down the Qyu)</small></div>
+        <div id="chartPriority"></div>
+        <div id="chartTasksSeconds"></div>
+        <div id="chartDone"></div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.16/vue.min.js" integrity="sha256-TaLceMwjWRqe4yhbqPOJH6V7UGt5AvvdNfpaIXJWbFU=" crossorigin="anonymous"></script>
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+  <script src="qyu.umd.js"></script>
+  <script type="text/javascript">
+    google.charts.load('current', {'packages':['corechart','line']});
+    let instance = Qyu();
+    function wait(ms) {
+      return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+      });
+    }
+    new Vue({
+      el: '#app',
+      data: () => {
+        return {
+          pausing: false,
+          state: 'stop',
+          nb_tasks: 10000,
+          duration_task: 50,
+          priority_task: 0,
+          nb_processors: instance.rateLimit,
+          stats_interval: instance.statsInterval,
+          main_loop_interval: instance.loopInterval,
+          stats: {},
+          done: 0,
+          error: 0,
+          updates: [],
+        };
+      },
+      created() {
+      },
+      methods: {
+        start() {
+          instance = Qyu();
+          instance.on('error', () => {
+            this.error += 1;
+          });
+          instance.on('done', () => {
+            this.done += 1;
+          });
+          instance.on('drain', () => {
+            this.stopped();
+          });
+          instance.on('stats', (stats) => {
+            this.updates.push(stats);
+            this.stats = Object.assign(this.stats, stats);
+          });
+
+          this.state = 'play';
+          instance.rateLimit = this.nb_processors;
+          instance.statsInterval = this.stats_interval;
+          instance.loopInterval = this.main_loop_interval;
+
+          for (var i = 0; i < this.nb_tasks; i++) {
+            instance.push(
+              () => wait(this.duration_task > 0 ? this.duration_task : Math.random() * 20000 + 1),
+              this.priority_task > 0 ? this.priority_task : Math.floor(Math.random() * 10) + 1
+            );
+          }
+
+          this.chartPriority();
+
+          instance.start();
+        },
+        async stop() {
+          this.pausing = true;
+          await instance.pause();
+        },
+        stopped() {
+          this.pausing = false;
+          this.state = 'stop';
+          this.done = 0;
+          this.error = 0;
+          this.stats = {};
+
+          this.chartTasksSeconds();
+          this.chartDone();
+          this.updates = [];
+        },
+        chartTasksSeconds() {
+          var table =  [
+            ['Time', 'Number'],
+          ];
+          this.updates.forEach((stats, k) => table.push([k, stats.nbJobsPerSecond]));
+          var data = google.visualization.arrayToDataTable(table);
+
+          var options = {
+            title: 'Task per Seconds',
+            legend: 'none',
+            curveType: 'function',
+            animation: {startup: true, duration: 300, easing: 'linear'},
+            vAxis: {
+              minValue: 750,
+              viewWindow: {
+                min: 0,
+              },
+            },
+            pointsVisible: true,
+            pointSize: 1,
+            lineWidth: 1,
+          };
+
+          var chart = new google.visualization.LineChart(document.getElementById('chartTasksSeconds'));
+
+          chart.draw(data, options);
+        },
+        chartPriority() {
+          var table =  [
+            ['Task', 'Number of task per priority'],
+          ];
+          for (var i = 0, keys = Object.keys(instance.queue.buckets); i < keys.length; i++) {
+            table.push([
+              '#' + keys[i],
+              instance.queue.buckets[keys[i]].length,
+            ]);
+          }
+          var data = google.visualization.arrayToDataTable(table);
+
+          var options = {
+            title: 'Task priority repartition',
+            legend: 'none',
+          };
+
+          var chart = new google.visualization.PieChart(document.getElementById('chartPriority'));
+
+          chart.draw(data, options);
+        },
+        chartDone() {
+          var table =  [
+            ['Time', 'Number'],
+            [0, 0]
+          ];
+          this.updates.forEach((stats, k) => table.push([k, stats.done]));
+          var data = google.visualization.arrayToDataTable(table);
+
+          var options = {
+            title: 'Task executed',
+            legend: 'none',
+            curveType: 'function',
+            animation: {startup: true, duration: 300, easing: 'linear'},
+            lineWidth: 1,
+            vAxis: {
+              viewWindow: {
+                min: 0,
+              },
+            },
+          };
+
+          var chart = new google.visualization.LineChart(document.getElementById('chartDone'));
+
+          chart.draw(data, options);
+        },
+      }
+    });
+  </script>
+</body>
+</html>

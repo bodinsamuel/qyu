@@ -149,6 +149,7 @@ The only downside to this (because it was more fitting to this exercice) the str
 This library use
 - `prettier` + `eslint` for the syntax check/formatting, it really help to have a standard and automatic formatting (on pre-commit)
 - `jest` for the unit test and coverage, the api is clear and the cli is quiet powerful without overhead
+- `rollupjs` for packaging this lib into a single file to be used in browser. Rollup is way easier to use than webpack and have many advantages.
 
 This library does not use (but could be)
 - a better unique id generator
@@ -157,4 +158,7 @@ This library does not use (but could be)
 
 
 ## Improvements
-We could easily improve the script by entirely splitting the queue and the runner, to have a master queue and multiple runner in multiple node process. With websockets communication and message ack, but at this point, maybe a battle-tested tools would be more suited.
+- Automatic Retry/Unshift on error
+- Automatic start on first push
+- if it's in node: We could easily improve the script by entirely splitting the queue and the runner, to have a master queue and multiple runner in multiple node process. With websockets communication and message ack, but at this point, maybe a battle-tested tools would be more suited.
+- if it's in browser: we could use WebWorkers to do the same thing

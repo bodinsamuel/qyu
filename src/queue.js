@@ -5,10 +5,7 @@ module.exports = class Queue {
     this.buckets = {};
     this.pushed = 0;
 
-    // Create initial bucket with X entries
-    for (var i = 1; i <= this.maxPriority; i++) {
-      this.buckets[i] = [];
-    }
+    this.init();
   }
 
   destroy() {
@@ -17,6 +14,14 @@ module.exports = class Queue {
 
   get length() {
     return this._length();
+  }
+
+  init() {
+    this.pushed = 0;
+    // Create initial bucket with X entries
+    for (var i = 1; i <= this.maxPriority; i++) {
+      this.buckets[i] = [];
+    }
   }
 
   /**

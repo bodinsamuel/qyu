@@ -6,10 +6,11 @@
   "scripts": {
     "test": "jest test/",
     "coverage": "jest test/ --coverage",
-    "precommit": "lint-staged"
+    "precommit": "lint-staged",
+    "build": "cross-env NODE_ENV=production rollup -c"
   },
   "lint-staged": {
-    "*.js": [
+    "{src,test}/*.js": [
       "prettier --write",
       "git add",
       "eslint"
@@ -18,7 +19,7 @@
   "jest": {
     "coverageThreshold": {
       "global": {
-        "branches": 99,
+        "branches": 95,
         "functions": 99,
         "lines": 99,
         "statements": 99
@@ -31,12 +32,19 @@
     "type": "git",
     "url": "git+https://github.com/bodinsamuel/qyu.git"
   },
+  "browser": "dist/qyu.umd.js",
   "devDependencies": {
+    "cross-env": "5.1.4",
     "eslint": "4.19.1",
     "eslint-plugin-jest": "^21.15.0",
     "husky": "0.14.3",
     "jest": "^22.4.3",
     "lint-staged": "7.0.4",
-    "prettier": "1.12.0"
+    "prettier": "1.12.0",
+    "rollup": "0.58.0",
+    "rollup-plugin-commonjs": "9.1.0",
+    "rollup-plugin-node-resolve": "3.3.0",
+    "rollup-plugin-replace": "2.0.0",
+    "rollup-plugin-uglify": "3.0.0"
   }
 }

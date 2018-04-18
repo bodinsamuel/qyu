@@ -1,0 +1,1 @@
+../dist/qyu.umd.js
